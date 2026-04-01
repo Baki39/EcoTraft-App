@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isValidUser() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['uid', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.createdAt is number &&
+             (!('subscriptionStatus' in data) || data.subscriptionStatus in ['active', 'trial', 'none']) &&
+             (!('stripeCustomerId' in data) || data.stripeCustomerId is string) &&
+             (!('subscriptionId' in data) || data.subscriptionId is string);
+    }
+    function isValidProject() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['userId', 'analysis', 'selectedIdeaId', 'dateSaved']) &&
+             data.userId == request.auth.uid &&
+             data.dateSaved is number &&
+             data.selectedIdeaId is string &&
+             data.analysis is map;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser() && 
+                    (!('subscriptionStatus' in request.resource.data) || request.resource.data.subscriptionStatus == 'none');
+      allow update: if isOwner(userId) && isValidUser() && 
+                    request.resource.data.uid == resource.data.uid && 
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    (!('subscriptionStatus' in request.resource.data) || request.resource.data.subscriptionStatus == resource.data.subscriptionStatus) &&
+                    (!('stripeCustomerId' in request.resource.data) || request.resource.data.stripeCustomerId == resource.data.stripeCustomerId) &&
+                    (!('subscriptionId' in request.resource.data) || request.resource.data.subscriptionId == resource.data.subscriptionId);
+      
+      match /projects/{projectId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidProject();
+        allow update: if isOwner(userId) && isValidProject() && 
+                      request.resource.data.userId == resource.data.userId && 
+                      request.resource.data.dateSaved == resource.data.dateSaved;
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

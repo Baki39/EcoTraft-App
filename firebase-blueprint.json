@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "subscriptionStatus": { "type": "string", "enum": ["active", "trial", "none"] },
+        "stripeCustomerId": { "type": "string" },
+        "subscriptionId": { "type": "string" }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A saved upcycling project",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "analysis": { "type": "object" },
+        "selectedIdeaId": { "type": "string" },
+        "originalImage": { "type": "string" },
+        "generatedImage": { "type": "string" },
+        "dateSaved": { "type": "number" }
+      },
+      "required": ["userId", "analysis", "selectedIdeaId", "dateSaved"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/users/{userId}/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "User's saved projects"
+    }
+  }
+}

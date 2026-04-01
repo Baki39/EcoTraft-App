@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-eco: #00E676;
+  --color-selenium: #E2FF3D;
+  --color-dark: #050505;
+}
+
+@layer base {
+  body {
+    @apply bg-dark text-zinc-50 font-sans antialiased;
+  }
+}
+
+@keyframes scan {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}

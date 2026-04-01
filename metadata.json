@@ -1,0 +1,5 @@
+{
+  "name": "Eco-Advisor & DIY",
+  "description": "A friendly, creative, and knowledgeable AI assistant that helps you upcycle, repair, and recycle your old items.",
+  "requestFramePermissions": ["camera"]
+}

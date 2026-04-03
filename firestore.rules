@@ -14,7 +14,8 @@ service cloud.firestore {
              data.createdAt is number &&
              (!('subscriptionStatus' in data) || data.subscriptionStatus in ['active', 'trial', 'none']) &&
              (!('stripeCustomerId' in data) || data.stripeCustomerId is string) &&
-             (!('subscriptionId' in data) || data.subscriptionId is string);
+             (!('subscriptionId' in data) || data.subscriptionId is string) &&
+             (!('analysesCount' in data) || data.analysesCount is number);
     }
     function isValidProject() {
       let data = request.resource.data;

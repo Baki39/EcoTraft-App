@@ -7,6 +7,8 @@ import { auth, db, signInWithGoogle, logOut } from './firebase';
 import { Language, languages, t } from './i18n';
 import { analyzeItem, generateProjectImage, AnalysisResult } from './lib/gemini';
 import { LandingPage } from './components/LandingPage';
+import { Logo } from './components/Logo';
+import { PricingPlan } from './components/PricingPlan';
 
 async function testConnection() {
   try {
@@ -81,6 +83,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'trial' | 'none'>('none');
+  const [analysesCount, setAnalysesCount] = useState(0);
   const [isSubscribing, setIsSubscribing] = useState(false);
 
   useEffect(() => {
@@ -97,14 +100,18 @@ function App() {
             displayName: currentUser.displayName,
             photoURL: currentUser.photoURL,
             createdAt: Date.now(),
-            subscriptionStatus: 'none'
+            subscriptionStatus: 'none',
+            analysesCount: 0
           });
+          setAnalysesCount(0);
         } else {
           setSubscriptionStatus(userSnap.data().subscriptionStatus || 'none');
+          setAnalysesCount(userSnap.data().analysesCount || 0);
         }
       } else {
         setSavedProjects([]);
         setSubscriptionStatus('none');
+        setAnalysesCount(0);
       }
     });
     return () => unsubscribe();
@@ -116,6 +123,7 @@ function App() {
     const userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (doc) => {
       if (doc.exists()) {
         setSubscriptionStatus(doc.data().subscriptionStatus || 'none');
+        setAnalysesCount(doc.data().analysesCount || 0);
       }
     });
 
@@ -378,14 +386,22 @@ function App() {
     setAppState('analyzing');
 
     try {
-      const matches = compressedImage.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-      if (!matches || matches.length !== 3) {
+      const parts = compressedImage.split(',');
+      if (parts.length !== 2 || !parts[0].startsWith('data:')) {
         throw new Error('Invalid image format');
       }
-      const mimeType = matches[1];
-      const base64Data = matches[2];
+      
+      const mimeType = parts[0].split(':')[1].split(';')[0];
+      const base64Data = parts[1];
 
       const result = await analyzeItem(base64Data, mimeType, languages[language]);
+      
+      if (user) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          analysesCount: analysesCount + 1
+        });
+      }
+
       setAnalysis(result);
       setAppState('ideas');
     } catch (err) {
@@ -461,9 +477,11 @@ function App() {
     );
   }
 
-  if (!user || subscriptionStatus === 'none') {
+  if (!user) {
     return <LandingPage user={user} onSubscribe={handleSubscribe} isSubscribing={isSubscribing} />;
   }
+
+  const showPricing = subscriptionStatus === 'none' && analysesCount >= 3 && (appState === 'upload' || appState === 'scanner');
 
   return (
     <div className="min-h-screen bg-dark text-zinc-50 font-sans selection:bg-selenium/30">
@@ -563,8 +581,21 @@ function App() {
       <main className="pt-24 pb-12 px-4 max-w-5xl mx-auto min-h-screen flex flex-col">
         <AnimatePresence mode="wait">
           
+          {/* PRICING SCREEN */}
+          {showPricing && (
+            <motion.div
+              key="pricing"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="flex-1 flex flex-col items-center justify-center w-full"
+            >
+              <PricingPlan onSubscribe={handleSubscribe} isSubscribing={isSubscribing} />
+            </motion.div>
+          )}
+
           {/* UPLOAD SCREEN */}
-          {appState === 'upload' && (
+          {appState === 'upload' && !showPricing && (
             <motion.div
               key="upload"
               initial={{ opacity: 0, y: 20 }}
@@ -618,7 +649,7 @@ function App() {
           )}
 
           {/* SCANNER SCREEN */}
-          {appState === 'scanner' && (
+          {appState === 'scanner' && !showPricing && (
             <motion.div
               key="scanner"
               initial={{ opacity: 0 }}

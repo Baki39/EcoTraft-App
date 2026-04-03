@@ -4,7 +4,6 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import cors from "cors";
 import path from "path";
-import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
 import admin from "firebase-admin";
 import fs from "fs";
@@ -91,25 +90,6 @@ async function startServer() {
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
   console.log("API Key exists:", !!apiKey);
-  const ai = new GoogleGenAI({ apiKey: apiKey });
-
-  async function executeWithRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
-    let attempt = 0;
-    while (attempt < maxRetries) {
-      try {
-        return await operation();
-      } catch (error: any) {
-        attempt++;
-        const isRetryable = error.status === 503 || error.message?.includes('503') || error.message?.includes('high demand') || error.message?.includes('UNAVAILABLE');
-        if (!isRetryable || attempt >= maxRetries) {
-          throw error;
-        }
-        // Silently retry on 503 to avoid cluttering logs with expected high-demand errors
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt))); // 2s, 4s, 8s
-      }
-    }
-    throw new Error("Max retries reached");
-  }
 
   // API routes FIRST
   app.get("/api/health", (req, res) => {
@@ -163,153 +143,6 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error creating checkout session:", error);
       res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/analyze", async (req, res) => {
-    try {
-      const { base64Image, mimeType, language } = req.body;
-
-      if (!base64Image || !mimeType || !language) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      const prompt = `Analyze this image of an item. The user wants to upcycle it.
-      CRITICAL INSTRUCTION: You MUST provide ALL text responses (itemName, title, shortDescription, instructions, materials, disposal instructions, and ecoFact) in the following language: ${language}. 
-      Only the 'id' and 'imagePrompt' fields should remain in English.
-
-      Return a JSON object with:
-      1. itemName: The name of the item (in ${language}).
-      2. ideas: An array of exactly 3 distinct, creative DIY project ideas to upcycle this item. For each idea, provide:
-         - id: a unique string (e.g., "idea-1")
-         - title: A catchy title for the project (in ${language}).
-         - shortDescription: A 1-sentence description (in ${language}).
-         - instructions: An array of step-by-step instructions (in ${language}).
-         - materials: An array of additional materials needed (in ${language}).
-         - imagePrompt: A detailed prompt IN ENGLISH to transform the provided image into the FINAL completed project. CRITICAL: The prompt MUST explicitly instruct the image generator to use the original image as the base, retaining the EXACT shape, color, texture, and identity of the original item, and ONLY add the necessary modifications to upcycle it. Do NOT generate a completely new or similar item. It should be photorealistic, high quality, studio lighting.
-      3. disposal: Instructions on how to properly recycle or dispose of this item if the user chooses not to upcycle it.
-         - instructions: Step-by-step eco-friendly disposal instructions (in ${language}).
-         - ecoFact: A positive, encouraging eco-fact related to recycling this item (in ${language}).`;
-
-      const response = await executeWithRetry(() => ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                data: base64Image,
-                mimeType: mimeType,
-              }
-            },
-            {
-              text: prompt
-            }
-          ]
-        },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              itemName: { type: "STRING" },
-              ideas: {
-                type: "ARRAY",
-                items: {
-                  type: "OBJECT",
-                  properties: {
-                    id: { type: "STRING" },
-                    title: { type: "STRING" },
-                    shortDescription: { type: "STRING" },
-                    instructions: { type: "ARRAY", items: { type: "STRING" } },
-                    materials: { type: "ARRAY", items: { type: "STRING" } },
-                    imagePrompt: { type: "STRING" },
-                  },
-                  required: ["id", "title", "shortDescription", "instructions", "materials", "imagePrompt"]
-                }
-              },
-              disposal: {
-                type: "OBJECT",
-                properties: {
-                  instructions: { type: "STRING" },
-                  ecoFact: { type: "STRING" }
-                },
-                required: ["instructions", "ecoFact"]
-              }
-            },
-            required: ["itemName", "ideas", "disposal"]
-          }
-        }
-      }));
-
-      const text = response.text;
-      if (!text) throw new Error("No response from AI");
-      
-      res.json(JSON.parse(text));
-    } catch (error: any) {
-      console.error("Error analyzing image:", error);
-      res.status(500).json({ error: "Failed to analyze image", details: error.message, stack: error.stack });
-    }
-  });
-
-  app.post("/api/generate-image", async (req, res) => {
-    try {
-      const { prompt, originalImageBase64 } = req.body;
-
-      if (!prompt) {
-        return res.status(400).json({ error: "Missing prompt" });
-      }
-
-      let contents: any = prompt;
-
-      if (originalImageBase64) {
-        // Extract mime type and base64 data from data URI
-        const matches = originalImageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        if (matches && matches.length === 3) {
-          const mimeType = matches[1];
-          const base64Data = matches[2];
-          
-          contents = {
-            parts: [
-              {
-                inlineData: {
-                  data: base64Data,
-                  mimeType: mimeType,
-                }
-              },
-              {
-                text: prompt
-              }
-            ]
-          };
-        }
-      }
-
-      const response = await executeWithRetry(() => ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: contents,
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1"
-          }
-        }
-      }));
-
-      let imageUrl = null;
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-          imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-
-      if (!imageUrl) {
-        throw new Error("No image generated");
-      }
-
-      res.json({ imageUrl });
-    } catch (error) {
-      console.error("Error generating image:", error);
-      res.status(500).json({ error: "Failed to generate image" });
     }
   });
 

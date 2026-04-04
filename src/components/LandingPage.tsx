@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Sparkles, Recycle, Image as ImageIcon, CheckCircle2, LogIn, Loader2 } from 'lucide-react';
-import { signInWithGoogle } from '../firebase';
+import { Sparkles, Recycle, Image as ImageIcon, CheckCircle2, Play, Loader2 } from 'lucide-react';
 
 interface LandingPageProps {
   user: any;
   onSubscribe: (plan: 'monthly' | 'quarterly') => void;
   isSubscribing: boolean;
+  onStartApp: () => void;
+  loginError?: string | null;
+  isLoggingIn?: boolean;
 }
 
-export function LandingPage({ user, onSubscribe, isSubscribing }: LandingPageProps) {
+export function LandingPage({ user, onSubscribe, isSubscribing, onStartApp, loginError, isLoggingIn }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-dark text-white selection:bg-selenium/30">
       {/* Hero Section */}
@@ -54,13 +56,19 @@ export function LandingPage({ user, onSubscribe, isSubscribing }: LandingPagePro
               transition={{ delay: 0.3 }}
             >
               <button
-                onClick={signInWithGoogle}
-                className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-white text-black hover:bg-zinc-200 transition-colors text-lg font-semibold"
+                onClick={onStartApp}
+                disabled={isLoggingIn}
+                className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-white text-black hover:bg-zinc-200 transition-colors text-lg font-semibold disabled:opacity-50"
               >
-                <LogIn className="w-5 h-5" />
-                Continue with Google
+                {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
+                {isLoggingIn ? 'Pokretanje...' : 'Start App'}
               </button>
-              <p className="mt-4 text-sm text-zinc-500">Sign in to start upcycling</p>
+              {loginError && (
+                <div className="mt-4 p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-sm max-w-md mx-auto">
+                  {loginError}
+                </div>
+              )}
+              <p className="mt-4 text-sm text-zinc-500">No registration required</p>
             </motion.div>
           )}
         </div>

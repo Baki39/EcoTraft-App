@@ -3,7 +3,7 @@ import { Leaf, Upload, ArrowLeft, Recycle, Sparkles, Loader2, Image as ImageIcon
 import { motion, AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, getDoc, updateDoc, getDocFromServer } from 'firebase/firestore';
-import { auth, db, signInWithGoogle, logOut } from './firebase';
+import { auth, db, startGuestSession, signInWithGoogle, logOut } from './firebase';
 import { Language, languages, t } from './i18n';
 import { analyzeItem, generateProjectImage, AnalysisResult } from './lib/gemini';
 import { LandingPage } from './components/LandingPage';
@@ -74,6 +74,22 @@ function App() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'trial' | 'none'>('none');
   const [analysesCount, setAnalysesCount] = useState(0);
   const [isSubscribing, setIsSubscribing] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+
+  const handleStartApp = async () => {
+    setIsLoggingIn(true);
+    setLoginError(null);
+    try {
+      await startGuestSession();
+    } catch (error: any) {
+      console.warn("Anonymous auth disabled, continuing in local mode.", error);
+    } finally {
+      setIsLoggingIn(false);
+      setHasStarted(true);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -85,9 +101,6 @@ function App() {
         if (!userSnap.exists()) {
           await setDoc(userRef, {
             uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: currentUser.displayName,
-            photoURL: currentUser.photoURL,
             createdAt: Date.now(),
             subscriptionStatus: 'none',
             analysesCount: 0
@@ -164,10 +177,14 @@ function App() {
   const handleSaveProject = async () => {
     if (!selectedIdea || !analysis) return;
     
-    if (!user) {
-      setError("Please sign in to save projects.");
+    if (!user || user.isAnonymous) {
+      setError("Please sign in with Google to save projects to your cloud memory.");
       setTimeout(() => setError(null), 3000);
-      signInWithGoogle();
+      try {
+        await signInWithGoogle();
+      } catch (err) {
+        console.error("Failed to sign in", err);
+      }
       return;
     }
 
@@ -466,8 +483,8 @@ function App() {
     );
   }
 
-  if (!user) {
-    return <LandingPage user={user} onSubscribe={handleSubscribe} isSubscribing={isSubscribing} />;
+  if (!user && !hasStarted) {
+    return <LandingPage user={user} onSubscribe={handleSubscribe} isSubscribing={isSubscribing} onStartApp={handleStartApp} loginError={loginError} isLoggingIn={isLoggingIn} />;
   }
 
   const showPricing = subscriptionStatus === 'none' && analysesCount >= 3 && (appState === 'upload' || appState === 'scanner');
@@ -497,7 +514,7 @@ function App() {
           </div>
           
           <div className="flex items-center gap-4">
-            {user ? (
+            {user && !user.isAnonymous ? (
               <button
                 onClick={logOut}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors text-sm font-medium text-zinc-300"
@@ -514,7 +531,7 @@ function App() {
                 <span className="hidden sm:inline">Sign In</span>
               </button>
             )}
-            
+
             {appState !== 'upload' && appState !== 'scanner' && (
               <button
                 onClick={() => {

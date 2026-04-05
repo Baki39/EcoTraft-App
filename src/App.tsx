@@ -182,8 +182,14 @@ function App() {
       setTimeout(() => setError(null), 3000);
       try {
         await signInWithGoogle();
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to sign in", err);
+        if (err.code === 'auth/unauthorized-domain') {
+          setError("Ova domena nije autorizovana za prijavu. Dodajte je u Firebase Console -> Authentication -> Settings -> Authorized domains.");
+        } else {
+          setError("Greška pri prijavi: " + (err.message || "Nepoznata greška"));
+        }
+        setTimeout(() => setError(null), 6000);
       }
       return;
     }
@@ -359,19 +365,29 @@ function App() {
   // Camera handling
   useEffect(() => {
     let stream: MediaStream | null = null;
+    let isMounted = true;
     
     const startCamera = async () => {
       try {
         setCameraError(false);
-        stream = await navigator.mediaDevices.getUserMedia({ 
+        const newStream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: "environment" } 
         });
+        
+        if (!isMounted) {
+          newStream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        
+        stream = newStream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
       } catch (err) {
-        console.error("Error accessing camera:", err);
-        setCameraError(true);
+        if (isMounted) {
+          console.error("Error accessing camera:", err);
+          setCameraError(true);
+        }
       }
     };
 
@@ -380,8 +396,12 @@ function App() {
     }
 
     return () => {
+      isMounted = false;
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
     };
   }, [appState]);
@@ -524,7 +544,18 @@ function App() {
               </button>
             ) : (
               <button
-                onClick={signInWithGoogle}
+                onClick={async () => {
+                  try {
+                    await signInWithGoogle();
+                  } catch (err: any) {
+                    if (err.code === 'auth/unauthorized-domain') {
+                      setError("Ova domena nije autorizovana za prijavu. Dodajte je u Firebase Console -> Authentication -> Settings -> Authorized domains.");
+                    } else {
+                      setError("Greška pri prijavi: " + (err.message || "Nepoznata greška"));
+                    }
+                    setTimeout(() => setError(null), 6000);
+                  }
+                }}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-eco/20 hover:bg-eco/30 transition-colors text-sm font-medium text-eco"
               >
                 <LogIn className="w-4 h-4" />

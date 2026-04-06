@@ -34,6 +34,9 @@ jobs:
       - name: Build web assets
         run: npm run build
 
+      - name: Install Capacitor CLI globally
+        run: npm install -g @capacitor/cli
+
       - name: Sync Capacitor
         run: npx cap sync android
 

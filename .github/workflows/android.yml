@@ -24,23 +24,17 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: |
-          cd EcoTraft-App
-          npm install
+        run: npm install
 
       - name: Build web assets
-        run: |
-          cd EcoTraft-App
-          npm run build
+        run: npm run build
 
       - name: Sync Capacitor
-        run: |
-          cd EcoTraft-App
-          npx cap sync android
+        run: npx cap sync android
 
       - name: Build debug APK
         run: |
-          cd EcoTraft-App/android
+          cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
@@ -48,4 +42,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: EcoTraft-debug.apk
-          path: EcoTraft-App/android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk

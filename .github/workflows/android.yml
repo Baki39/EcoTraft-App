@@ -38,7 +38,8 @@ jobs:
         run: npm install -g @capacitor/cli
 
       - name: Add Android platform
-        run: npx cap add android
+        run: |
+          npx cap add android --appId com.ecotraft.app --appName EcoTraft
 
       - name: Sync Capacitor
         run: npx cap sync android

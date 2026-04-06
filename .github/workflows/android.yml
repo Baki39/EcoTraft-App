@@ -37,9 +37,6 @@ jobs:
       - name: Install Capacitor CLI globally
         run: npm install -g @capacitor/cli @capacitor/android
 
-      - name: Add Android platform
-        run: npx cap add android
-
       - name: Sync Capacitor
         run: npx cap sync android
 
